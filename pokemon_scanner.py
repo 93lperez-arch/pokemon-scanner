@@ -198,8 +198,9 @@ def check_one(product):
 
 def main():
 
-    print("Pokemon Hybrid Scanner Started")
+   print("Pokemon Hybrid Scanner Started")
 
+send_discord({"name":"Scanner Test","url":"Test"}, "test_alert", ["Scanner is running correctly"])
     end_time = time.time() + 540
 
     while time.time() < end_time:
