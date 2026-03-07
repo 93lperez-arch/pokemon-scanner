@@ -1,11 +1,12 @@
 import time
 import requests
 import os
+import re
 from datetime import datetime
 
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
-CHECK_INTERVAL = 15
+CHECK_INTERVAL = 10
 TIMEOUT = 20
 
 WALMART_CART_URL = "https://www.walmart.com/cart"
@@ -17,7 +18,6 @@ HEADERS = {
 }
 
 PRODUCTS = [
-    # ===== DIRECT PRODUCT PAGES =====
     {
         "name": "Prismatic Evolutions ETB",
         "url": "https://www.walmart.com/ip/13816151308",
@@ -39,7 +39,6 @@ PRODUCTS = [
         "site": "product",
     },
 
-    # ===== PERFECT ORDER =====
     {
         "name": "Perfect Order ETB Search",
         "url": "https://www.walmart.com/search?q=pokemon+perfect+order+elite+trainer+box",
@@ -56,7 +55,6 @@ PRODUCTS = [
         "site": "search",
     },
 
-    # ===== PHANTASMAL FLAMES =====
     {
         "name": "Phantasmal Flames ETB Search",
         "url": "https://www.walmart.com/search?q=phantasmal+flames+elite+trainer+box",
@@ -73,7 +71,6 @@ PRODUCTS = [
         "site": "search",
     },
 
-    # ===== DESTINED RIVALS =====
     {
         "name": "Destined Rivals ETB Search",
         "url": "https://www.walmart.com/search?q=pokemon+destined+rivals+elite+trainer+box",
@@ -90,7 +87,6 @@ PRODUCTS = [
         "site": "search",
     },
 
-    # ===== BLACK BOLT =====
     {
         "name": "Black Bolt ETB Search",
         "url": "https://www.walmart.com/search?q=pokemon+black+bolt+elite+trainer+box",
@@ -112,22 +108,11 @@ PRODUCTS = [
         "site": "search",
     },
     {
-        "name": "Black Bolt Three Pack Search",
-        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+three+pack",
-        "site": "search",
-    },
-    {
         "name": "Black Bolt Promo Search",
         "url": "https://www.walmart.com/search?q=pokemon+black+bolt+promo",
         "site": "search",
     },
-    {
-        "name": "Black Bolt Promo Box Search",
-        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+promo+box",
-        "site": "search",
-    },
 
-    # ===== WHITE FLARE =====
     {
         "name": "White Flare ETB Search",
         "url": "https://www.walmart.com/search?q=pokemon+white+flare+elite+trainer+box",
@@ -149,18 +134,8 @@ PRODUCTS = [
         "site": "search",
     },
     {
-        "name": "White Flare Three Pack Search",
-        "url": "https://www.walmart.com/search?q=pokemon+white+flare+three+pack",
-        "site": "search",
-    },
-    {
         "name": "White Flare Promo Search",
         "url": "https://www.walmart.com/search?q=pokemon+white+flare+promo",
-        "site": "search",
-    },
-    {
-        "name": "White Flare Promo Box Search",
-        "url": "https://www.walmart.com/search?q=pokemon+white+flare+promo+box",
         "site": "search",
     },
 ]
@@ -208,6 +183,42 @@ def fetch_text(url):
     return r.text.lower()
 
 
+def extract_item_id(url):
+    m = re.search(r"/ip/(\d+)", url)
+    return m.group(1) if m else None
+
+
+def check_walmart_product_fast(product):
+    """
+    Faster structured check for direct Walmart product pages.
+    Falls back to HTML if needed.
+    """
+    item_id = extract_item_id(product["url"])
+    if not item_id:
+        return check_walmart_product_html(product)
+
+    api_url = f"https://www.walmart.com/ip/{item_id}"
+
+    try:
+        r = requests.get(api_url, headers=HEADERS, timeout=TIMEOUT)
+        r.raise_for_status()
+        text = r.text.lower()
+
+        return classify_product_page(text)
+    except Exception as e:
+        print(f"Fast check fallback for {product['name']}: {e}")
+        return check_walmart_product_html(product)
+
+
+def check_walmart_product_html(product):
+    try:
+        text = fetch_text(product["url"])
+        return classify_product_page(text)
+    except Exception as e:
+        print(f"Error checking {product['name']}: {e}")
+        return "error"
+
+
 def classify_product_page(text):
     if "sold and shipped by walmart" in text and "add to cart" in text:
         return "in_stock_walmart"
@@ -251,14 +262,12 @@ def should_alert(url, status):
 
 def check_one(product):
     try:
-        text = fetch_text(product["url"])
-
         if product["site"] == "product":
-            status = classify_product_page(text)
-        else:
-            status = classify_search_page(text)
+            return check_walmart_product_fast(product)
 
-        return status
+        text = fetch_text(product["url"])
+        return classify_search_page(text)
+
     except Exception as e:
         print(f"Error checking {product['name']}: {e}")
         return "error"
@@ -287,7 +296,7 @@ def main():
 
                 if status == "in_stock_walmart":
                     extra.append("Signal: sold and shipped by Walmart + add to cart")
-                    extra.append("This is the best alert.")
+                    extra.append("Best retail signal.")
                 elif status == "possible_stock":
                     extra.append("Signal: add to cart text detected")
                     extra.append("Check quickly in app/browser.")
