@@ -17,6 +17,7 @@ HEADERS = {
 }
 
 PRODUCTS = [
+    # ===== DIRECT PRODUCT PAGES =====
     {
         "name": "Prismatic Evolutions ETB",
         "url": "https://www.walmart.com/ip/13816151308",
@@ -37,6 +38,8 @@ PRODUCTS = [
         "url": "https://www.walmart.com/ip/10692607747",
         "site": "product",
     },
+
+    # ===== PERFECT ORDER =====
     {
         "name": "Perfect Order ETB Search",
         "url": "https://www.walmart.com/search?q=pokemon+perfect+order+elite+trainer+box",
@@ -52,6 +55,8 @@ PRODUCTS = [
         "url": "https://www.walmart.com/search?q=pokemon+perfect+order+booster+bundle",
         "site": "search",
     },
+
+    # ===== PHANTASMAL FLAMES =====
     {
         "name": "Phantasmal Flames ETB Search",
         "url": "https://www.walmart.com/search?q=phantasmal+flames+elite+trainer+box",
@@ -67,6 +72,8 @@ PRODUCTS = [
         "url": "https://www.walmart.com/search?q=phantasmal+flames+booster+bundle",
         "site": "search",
     },
+
+    # ===== DESTINED RIVALS =====
     {
         "name": "Destined Rivals ETB Search",
         "url": "https://www.walmart.com/search?q=pokemon+destined+rivals+elite+trainer+box",
@@ -80,6 +87,80 @@ PRODUCTS = [
     {
         "name": "Destined Rivals Booster Bundle Search",
         "url": "https://www.walmart.com/search?q=pokemon+destined+rivals+booster+bundle",
+        "site": "search",
+    },
+
+    # ===== BLACK BOLT =====
+    {
+        "name": "Black Bolt ETB Search",
+        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+elite+trainer+box",
+        "site": "search",
+    },
+    {
+        "name": "Black Bolt Booster Box Search",
+        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+booster+box",
+        "site": "search",
+    },
+    {
+        "name": "Black Bolt Booster Bundle Search",
+        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+booster+bundle",
+        "site": "search",
+    },
+    {
+        "name": "Black Bolt 3 Pack Blister Search",
+        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+3+pack+blister",
+        "site": "search",
+    },
+    {
+        "name": "Black Bolt Three Pack Search",
+        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+three+pack",
+        "site": "search",
+    },
+    {
+        "name": "Black Bolt Promo Search",
+        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+promo",
+        "site": "search",
+    },
+    {
+        "name": "Black Bolt Promo Box Search",
+        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+promo+box",
+        "site": "search",
+    },
+
+    # ===== WHITE FLARE =====
+    {
+        "name": "White Flare ETB Search",
+        "url": "https://www.walmart.com/search?q=pokemon+white+flare+elite+trainer+box",
+        "site": "search",
+    },
+    {
+        "name": "White Flare Booster Box Search",
+        "url": "https://www.walmart.com/search?q=pokemon+white+flare+booster+box",
+        "site": "search",
+    },
+    {
+        "name": "White Flare Booster Bundle Search",
+        "url": "https://www.walmart.com/search?q=pokemon+white+flare+booster+bundle",
+        "site": "search",
+    },
+    {
+        "name": "White Flare 3 Pack Blister Search",
+        "url": "https://www.walmart.com/search?q=pokemon+white+flare+3+pack+blister",
+        "site": "search",
+    },
+    {
+        "name": "White Flare Three Pack Search",
+        "url": "https://www.walmart.com/search?q=pokemon+white+flare+three+pack",
+        "site": "search",
+    },
+    {
+        "name": "White Flare Promo Search",
+        "url": "https://www.walmart.com/search?q=pokemon+white+flare+promo",
+        "site": "search",
+    },
+    {
+        "name": "White Flare Promo Box Search",
+        "url": "https://www.walmart.com/search?q=pokemon+white+flare+promo+box",
         "site": "search",
     },
 ]
@@ -186,12 +267,6 @@ def check_one(product):
 def main():
     print("Pokemon Hybrid Scanner Started")
     print("Webhook loaded:", bool(DISCORD_WEBHOOK))
-
-    send_discord(
-        {"name": "Scanner Online", "url": "https://www.walmart.com/"},
-        "bot_test",
-        ["Your Pokemon scanner is running on GitHub."]
-    )
 
     end_time = time.time() + 540
 
