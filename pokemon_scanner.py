@@ -17,82 +17,75 @@ HEADERS = {
 }
 
 PRODUCTS = [
-
-    # ===== DIRECT PRODUCT PAGES =====
-
     {
         "name": "Prismatic Evolutions ETB",
         "url": "https://www.walmart.com/ip/13816151308",
-        "site": "product"
+        "site": "product",
     },
     {
         "name": "Prismatic Evolutions Booster Bundle",
         "url": "https://www.walmart.com/ip/5373472869",
-        "site": "product"
+        "site": "product",
     },
     {
         "name": "Pokemon 151 Booster Bundle",
         "url": "https://www.walmart.com/ip/1160437186",
-        "site": "product"
+        "site": "product",
     },
     {
         "name": "Surging Sparks ETB",
         "url": "https://www.walmart.com/ip/10692607747",
-        "site": "product"
+        "site": "product",
     },
-
-    # ===== SEARCH PAGES =====
-
     {
         "name": "Perfect Order ETB Search",
         "url": "https://www.walmart.com/search?q=pokemon+perfect+order+elite+trainer+box",
-        "site": "search"
+        "site": "search",
     },
     {
         "name": "Perfect Order Booster Box Search",
         "url": "https://www.walmart.com/search?q=pokemon+perfect+order+booster+box",
-        "site": "search"
+        "site": "search",
     },
     {
         "name": "Perfect Order Booster Bundle Search",
         "url": "https://www.walmart.com/search?q=pokemon+perfect+order+booster+bundle",
-        "site": "search"
+        "site": "search",
     },
     {
         "name": "Phantasmal Flames ETB Search",
         "url": "https://www.walmart.com/search?q=phantasmal+flames+elite+trainer+box",
-        "site": "search"
+        "site": "search",
     },
     {
         "name": "Phantasmal Flames Booster Box Search",
         "url": "https://www.walmart.com/search?q=phantasmal+flames+booster+box",
-        "site": "search"
+        "site": "search",
     },
     {
         "name": "Phantasmal Flames Booster Bundle Search",
         "url": "https://www.walmart.com/search?q=phantasmal+flames+booster+bundle",
-        "site": "search"
+        "site": "search",
     },
     {
         "name": "Destined Rivals ETB Search",
         "url": "https://www.walmart.com/search?q=pokemon+destined+rivals+elite+trainer+box",
-        "site": "search"
+        "site": "search",
     },
     {
         "name": "Destined Rivals Booster Box Search",
         "url": "https://www.walmart.com/search?q=pokemon+destined+rivals+booster+box",
-        "site": "search"
+        "site": "search",
     },
     {
         "name": "Destined Rivals Booster Bundle Search",
         "url": "https://www.walmart.com/search?q=pokemon+destined+rivals+booster+bundle",
-        "site": "search"
-    }
+        "site": "search",
+    },
 ]
 
 LAST_STATUS = {}
 LAST_ALERT_TIME = {}
-
 ALERT_COOLDOWN_SECONDS = 180
 
 
@@ -101,8 +94,8 @@ def now_str():
 
 
 def send_discord(product, status, extra_lines=None):
-
     if not DISCORD_WEBHOOK:
+        print("DISCORD_WEBHOOK missing")
         return
 
     lines = [
@@ -121,21 +114,20 @@ def send_discord(product, status, extra_lines=None):
     data = {"content": "\n".join(lines)}
 
     try:
-        requests.post(DISCORD_WEBHOOK, json=data, timeout=10)
-    except:
-        pass
+        r = requests.post(DISCORD_WEBHOOK, json=data, timeout=10)
+        print(f"Discord status code: {r.status_code}")
+        r.raise_for_status()
+    except Exception as e:
+        print(f"Discord send failed: {e}")
 
 
 def fetch_text(url):
-
     r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
     r.raise_for_status()
-
     return r.text.lower()
 
 
 def classify_product_page(text):
-
     if "sold and shipped by walmart" in text and "add to cart" in text:
         return "in_stock_walmart"
 
@@ -153,7 +145,6 @@ def classify_product_page(text):
 
 
 def classify_search_page(text):
-
     if "sold and shipped by walmart" in text and "add to cart" in text:
         return "in_stock_walmart"
 
@@ -164,12 +155,10 @@ def classify_search_page(text):
 
 
 def should_alert(url, status):
-
     if status not in {"in_stock_walmart", "possible_stock"}:
         return False
 
     current = time.time()
-
     last = LAST_ALERT_TIME.get(url, 0)
 
     if current - last >= ALERT_COOLDOWN_SECONDS:
@@ -180,9 +169,7 @@ def should_alert(url, status):
 
 
 def check_one(product):
-
     try:
-
         text = fetch_text(product["url"])
 
         if product["site"] == "product":
@@ -191,24 +178,28 @@ def check_one(product):
             status = classify_search_page(text)
 
         return status
-
-    except Exception:
+    except Exception as e:
+        print(f"Error checking {product['name']}: {e}")
         return "error"
 
 
 def main():
+    print("Pokemon Hybrid Scanner Started")
+    print("Webhook loaded:", bool(DISCORD_WEBHOOK))
 
-   print("Pokemon Hybrid Scanner Started")
+    # Startup test ping every run so you know Discord is working
+    send_discord(
+        {"name": "Scanner Online", "url": "https://www.walmart.com/"},
+        "bot_test",
+        ["Your Pokemon scanner is running on GitHub."]
+    )
 
-send_discord({"name":"Scanner Test","url":"Test"}, "test_alert", ["Scanner is running correctly"])
+    # GitHub Actions run window
     end_time = time.time() + 540
 
     while time.time() < end_time:
-
         for product in PRODUCTS:
-
             status = check_one(product)
-
             previous = LAST_STATUS.get(product["url"])
 
             print(product["name"], status)
@@ -219,21 +210,20 @@ send_discord({"name":"Scanner Test","url":"Test"}, "test_alert", ["Scanner is ru
             )
 
             if became_hot and should_alert(product["url"], status):
-
                 extra = []
 
                 if status == "in_stock_walmart":
                     extra.append("Signal: sold and shipped by Walmart + add to cart")
-
+                    extra.append("This is the best alert.")
                 elif status == "possible_stock":
                     extra.append("Signal: add to cart text detected")
+                    extra.append("Check quickly in app/browser.")
 
                 send_discord(product, status, extra)
 
             LAST_STATUS[product["url"]] = status
 
         print("---- next scan ----")
-
         time.sleep(CHECK_INTERVAL)
 
 
