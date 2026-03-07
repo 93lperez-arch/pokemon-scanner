@@ -187,14 +187,12 @@ def main():
     print("Pokemon Hybrid Scanner Started")
     print("Webhook loaded:", bool(DISCORD_WEBHOOK))
 
-    # Startup test ping every run so you know Discord is working
     send_discord(
         {"name": "Scanner Online", "url": "https://www.walmart.com/"},
         "bot_test",
         ["Your Pokemon scanner is running on GitHub."]
     )
 
-    # GitHub Actions run window
     end_time = time.time() + 540
 
     while time.time() < end_time:
