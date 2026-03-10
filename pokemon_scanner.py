@@ -1,7 +1,7 @@
 import os
 import time
-from urllib.parse import urljoin
 import requests
+from urllib.parse import urljoin
 
 WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
@@ -35,42 +35,38 @@ print("Pokemon bot running")
 
 seen = set()
 
+def run_bot():
 while True:
-
 for store, url in RETAILERS.items():
+try:
+r = session.get(url, headers=HEADERS, timeout=20)
+text = r.text.lower()
 
-    try:
+            if not any(k in text for k in KEYWORDS):
+                continue
 
-        r = session.get(url, headers=HEADERS, timeout=20)
+            if any(b in text for b in EXCLUDE):
+                continue
 
-        text = r.text.lower()
+            if url in seen:
+                continue
 
-        if not any(k in text for k in KEYWORDS):
-            continue
+            seen.add(url)
 
-        if any(b in text for b in EXCLUDE):
-            continue
+            if WEBHOOK:
+                payload = {
+                    "content": f"🚨 Pokemon product detected\n{url}\nStore: {store}"
+                }
+                try:
+                    session.post(WEBHOOK, json=payload, timeout=10)
+                except:
+                    pass
 
-        if url in seen:
-            continue
+            print("ALERT:", store)
 
-        seen.add(url)
+        except Exception as e:
+            print("Error:", store, e)
 
-        if WEBHOOK:
+    time.sleep(SCAN_INTERVAL)
 
-            payload = {
-                "content": f"🚨 Pokemon product detected\n{url}\nStore: {store}"
-            }
-
-            try:
-                session.post(WEBHOOK, json=payload, timeout=10)
-            except:
-                pass
-
-        print("ALERT:", store)
-
-    except Exception as e:
-
-        print("Error:", store, e)
-
-time.sleep(SCAN_INTERVAL)
+run_bot()
