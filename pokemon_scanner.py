@@ -1,7 +1,7 @@
 import os
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from urllib.parse import urljoin
 import time
 import threading
 
@@ -28,24 +28,22 @@ KEYWORDS = [
 
 EXCLUDE = ["journey together"]
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
-
 session = requests.Session()
-session.headers.update(HEADERS)
-
-def clean_url(url):
-parts = urlsplit(url)
-return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+session.headers.update({"User-Agent": "Mozilla/5.0"})
 
 def send_alert(product):
 if not WEBHOOK:
 print("Missing DISCORD_WEBHOOK secret")
 return
-payload = {"content": f"🚨 {product['title']}\n{product['url']}\nStore: {product['retailer']}"}
+
+payload = {
+    "content": f"🚨 {product['title']}\n{product['url']}\nStore: {product['retailer']}"
+}
+
 try:
-session.post(WEBHOOK, json=payload, timeout=10)
+    session.post(WEBHOOK, json=payload, timeout=10)
 except:
-pass
+    pass
 
 def fetch(url):
 try:
@@ -55,15 +53,20 @@ except:
 return ""
 
 def scan_retailer(retailer, url):
+
 html = fetch(url)
+
 if not html:
-return []
+    return []
 
 soup = BeautifulSoup(html, "html.parser")
+
 products = []
 
 for link in soup.select("a[href]"):
+
     title = link.get_text(strip=True)
+
     if not title:
         continue
 
@@ -76,10 +79,11 @@ for link in soup.select("a[href]"):
         continue
 
     href = link.get("href")
+
     if not href:
         continue
 
-    full_url = clean_url(urljoin(url, href))
+    full_url = urljoin(url, href)
 
     products.append({
         "title": title,
@@ -94,19 +98,31 @@ seen = set()
 print("Pokemon bot running")
 
 def run_bot():
+
 global seen
+
 while True:
-for retailer, url in RETAILERS.items():
-try:
-products = scan_retailer(retailer, url)
-for product in products:
-if product["url"] in seen:
-continue
-seen.add(product["url"])
-send_alert(product)
-print("ALERT:", product["title"])
-except Exception as e:
-print("Error:", retailer, e)
+
+    for retailer, url in RETAILERS.items():
+
+        try:
+
+            products = scan_retailer(retailer, url)
+
+            for product in products:
+
+                if product["url"] in seen:
+                    continue
+
+                seen.add(product["url"])
+
+                send_alert(product)
+
+                print("ALERT:", product["title"])
+
+        except Exception as e:
+
+            print("Error:", retailer, e)
 
     time.sleep(SCAN_INTERVAL)
 
