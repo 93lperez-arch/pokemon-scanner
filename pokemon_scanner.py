@@ -3,10 +3,10 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import time
-import threading
 
 WEBHOOK = os.getenv("DISCORD_WEBHOOK")
-SCAN_INTERVAL = 4
+
+SCAN_INTERVAL = 5
 
 RETAILERS = {
 "pokemon_center": "https://www.pokemoncenter.com/category/trading-card-game",
@@ -26,18 +26,24 @@ KEYWORDS = [
 "collection box"
 ]
 
-EXCLUDE = ["journey together"]
+EXCLUDE = [
+"journey together"
+]
+
+HEADERS = {
+"User-Agent": "Mozilla/5.0"
+}
 
 session = requests.Session()
-session.headers.update({"User-Agent": "Mozilla/5.0"})
 
-def send_alert(product):
+def send_alert(title, url, store):
+
 if not WEBHOOK:
-print("Missing DISCORD_WEBHOOK secret")
-return
+    print("Missing DISCORD_WEBHOOK secret")
+    return
 
 payload = {
-    "content": f"🚨 {product['title']}\n{product['url']}\nStore: {product['retailer']}"
+    "content": f"🚨 {title}\n{url}\nStore: {store}"
 }
 
 try:
@@ -46,13 +52,14 @@ except:
     pass
 
 def fetch(url):
-try:
-r = session.get(url, timeout=20)
-return r.text
-except:
-return ""
 
-def scan_retailer(retailer, url):
+try:
+    r = session.get(url, headers=HEADERS, timeout=20)
+    return r.text
+except:
+    return ""
+
+def scan_store(store, url):
 
 html = fetch(url)
 
@@ -61,7 +68,7 @@ if not html:
 
 soup = BeautifulSoup(html, "html.parser")
 
-products = []
+results = []
 
 for link in soup.select("a[href]"):
 
@@ -85,50 +92,35 @@ for link in soup.select("a[href]"):
 
     full_url = urljoin(url, href)
 
-    products.append({
-        "title": title,
-        "url": full_url,
-        "retailer": retailer
-    })
+    results.append((title, full_url))
 
-return products
+return results
 
 seen = set()
 
 print("Pokemon bot running")
 
-def run_bot():
-
-global seen
-
 while True:
 
-    for retailer, url in RETAILERS.items():
+for store, url in RETAILERS.items():
 
-        try:
+    try:
 
-            products = scan_retailer(retailer, url)
+        products = scan_store(store, url)
 
-            for product in products:
+        for title, link in products:
 
-                if product["url"] in seen:
-                    continue
+            if link in seen:
+                continue
 
-                seen.add(product["url"])
+            seen.add(link)
 
-                send_alert(product)
+            send_alert(title, link, store)
 
-                print("ALERT:", product["title"])
+            print("ALERT:", title)
 
-        except Exception as e:
+    except Exception as e:
 
-            print("Error:", retailer, e)
+        print("Error:", store, e)
 
-    time.sleep(SCAN_INTERVAL)
-
-thread = threading.Thread(target=run_bot)
-thread.daemon = True
-thread.start()
-
-while True:
-time.sleep(60)
+time.sleep(SCAN_INTERVAL)
