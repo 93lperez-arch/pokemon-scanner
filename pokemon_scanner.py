@@ -26,38 +26,18 @@ KEYWORDS = [
 "collection box"
 ]
 
-EXCLUDE = [
-"journey together"
-]
+EXCLUDE = ["journey together"]
 
-HEADERS = {
-"User-Agent": "Mozilla/5.0"
-}
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 session = requests.Session()
 
-def send_alert(title, url, store):
-
-if not WEBHOOK:
-    print("Missing DISCORD_WEBHOOK secret")
-    return
-
-payload = {
-    "content": f"🚨 {title}\n{url}\nStore: {store}"
-}
-
-try:
-    session.post(WEBHOOK, json=payload, timeout=10)
-except:
-    pass
-
 def fetch(url):
-
 try:
-    r = session.get(url, headers=HEADERS, timeout=20)
-    return r.text
+r = session.get(url, headers=HEADERS, timeout=20)
+return r.text
 except:
-    return ""
+return ""
 
 def scan_store(store, url):
 
@@ -68,7 +48,7 @@ if not html:
 
 soup = BeautifulSoup(html, "html.parser")
 
-results = []
+products = []
 
 for link in soup.select("a[href]"):
 
@@ -92,9 +72,9 @@ for link in soup.select("a[href]"):
 
     full_url = urljoin(url, href)
 
-    results.append((title, full_url))
+    products.append((title, full_url))
 
-return results
+return products
 
 seen = set()
 
@@ -115,7 +95,14 @@ for store, url in RETAILERS.items():
 
             seen.add(link)
 
-            send_alert(title, link, store)
+            if WEBHOOK:
+                payload = {
+                    "content": f"🚨 {title}\n{link}\nStore: {store}"
+                }
+                try:
+                    session.post(WEBHOOK, json=payload, timeout=10)
+                except:
+                    pass
 
             print("ALERT:", title)
 
