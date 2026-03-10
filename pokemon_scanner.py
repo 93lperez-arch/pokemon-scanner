@@ -1,472 +1,185 @@
-import time
-import requests
+```python
 import os
-import re
-from datetime import datetime
-from urllib.parse import urljoin
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlsplit, urlunsplit
+import time
+import threading
 
-DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
+# =========================
+# DISCORD WEBHOOK (FROM GITHUB SECRET)
+# =========================
 
-CHECK_INTERVAL = 10
-TIMEOUT = 20
+WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
-WALMART_CART_URL = "https://www.walmart.com/cart"
-WALMART_CHECKOUT_URL = "https://www.walmart.com/checkout"
-WALMART_BASE = "https://www.walmart.com"
+# =========================
+# SETTINGS
+# =========================
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept-Language": "en-US,en;q=0.9",
+SCAN_INTERVAL = 4
+
+RETAILERS = {
+    "pokemon_center": "https://www.pokemoncenter.com/category/trading-card-game",
+    "target": "https://www.target.com/s?searchTerm=pokemon+trading+card+game",
+    "walmart": "https://www.walmart.com/search?q=pokemon+trading+card+game",
+    "bestbuy": "https://www.bestbuy.com/site/searchpage.jsp?st=pokemon+trading+card+game",
+    "gamestop": "https://www.gamestop.com/search/?q=pokemon+tcg",
+    "samsclub": "https://www.samsclub.com/s/pokemon",
+    "costco": "https://www.costco.com/CatalogSearch?keyword=pokemon"
 }
 
-# Known direct product pages
-PRODUCTS = [
-    {
-        "name": "Prismatic Evolutions ETB",
-        "url": "https://www.walmart.com/ip/13816151308",
-        "site": "product",
-    },
-    {
-        "name": "Prismatic Evolutions Booster Bundle",
-        "url": "https://www.walmart.com/ip/5373472869",
-        "site": "product",
-    },
-    {
-        "name": "Pokemon 151 Booster Bundle",
-        "url": "https://www.walmart.com/ip/1160437186",
-        "site": "product",
-    },
-    {
-        "name": "Surging Sparks ETB",
-        "url": "https://www.walmart.com/ip/10692607747",
-        "site": "product",
-    },
+KEYWORDS = [
+    "elite trainer box",
+    "etb",
+    "booster bundle",
+    "tech sticker",
+    "collection box"
 ]
 
-# Search pages for discovery + stock-ish signals
-SEARCHES = [
-    {
-        "name": "Perfect Order ETB Search",
-        "url": "https://www.walmart.com/search?q=pokemon+perfect+order+elite+trainer+box",
-    },
-    {
-        "name": "Perfect Order Booster Box Search",
-        "url": "https://www.walmart.com/search?q=pokemon+perfect+order+booster+box",
-    },
-    {
-        "name": "Perfect Order Booster Bundle Search",
-        "url": "https://www.walmart.com/search?q=pokemon+perfect+order+booster+bundle",
-    },
-
-    {
-        "name": "Phantasmal Flames ETB Search",
-        "url": "https://www.walmart.com/search?q=phantasmal+flames+elite+trainer+box",
-    },
-    {
-        "name": "Phantasmal Flames Booster Box Search",
-        "url": "https://www.walmart.com/search?q=phantasmal+flames+booster+box",
-    },
-    {
-        "name": "Phantasmal Flames Booster Bundle Search",
-        "url": "https://www.walmart.com/search?q=phantasmal+flames+booster+bundle",
-    },
-
-    {
-        "name": "Destined Rivals ETB Search",
-        "url": "https://www.walmart.com/search?q=pokemon+destined+rivals+elite+trainer+box",
-    },
-    {
-        "name": "Destined Rivals Booster Box Search",
-        "url": "https://www.walmart.com/search?q=pokemon+destined+rivals+booster+box",
-    },
-    {
-        "name": "Destined Rivals Booster Bundle Search",
-        "url": "https://www.walmart.com/search?q=pokemon+destined+rivals+booster+bundle",
-    },
-
-    {
-        "name": "Black Bolt ETB Search",
-        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+elite+trainer+box",
-    },
-    {
-        "name": "Black Bolt Booster Box Search",
-        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+booster+box",
-    },
-    {
-        "name": "Black Bolt Booster Bundle Search",
-        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+booster+bundle",
-    },
-    {
-        "name": "Black Bolt 3 Pack Blister Search",
-        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+3+pack+blister",
-    },
-    {
-        "name": "Black Bolt Promo Search",
-        "url": "https://www.walmart.com/search?q=pokemon+black+bolt+promo",
-    },
-
-    {
-        "name": "White Flare ETB Search",
-        "url": "https://www.walmart.com/search?q=pokemon+white+flare+elite+trainer+box",
-    },
-    {
-        "name": "White Flare Booster Box Search",
-        "url": "https://www.walmart.com/search?q=pokemon+white+flare+booster+box",
-    },
-    {
-        "name": "White Flare Booster Bundle Search",
-        "url": "https://www.walmart.com/search?q=pokemon+white+flare+booster+bundle",
-    },
-    {
-        "name": "White Flare 3 Pack Blister Search",
-        "url": "https://www.walmart.com/search?q=pokemon+white+flare+3+pack+blister",
-    },
-    {
-        "name": "White Flare Promo Search",
-        "url": "https://www.walmart.com/search?q=pokemon+white+flare+promo",
-    },
+EXCLUDE = [
+    "journey together"
 ]
 
-LAST_STATUS = {}
-LAST_ALERT_TIME = {}
-DISCOVERED_URLS = set()
-KNOWN_PRODUCT_URLS = {p["url"] for p in PRODUCTS}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
 
-ALERT_COOLDOWN_SECONDS = 180
-DISCOVERY_ALERT_COOLDOWN_SECONDS = 900
+# =========================
+# FAST SESSION
+# =========================
 
+session = requests.Session()
+session.headers.update(HEADERS)
 
-def now_str():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# =========================
+# CLEAN URL
+# =========================
 
+def clean_url(url):
+    parts = urlsplit(url)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
 
-def send_discord(product, status, extra_lines=None):
-    if not DISCORD_WEBHOOK:
-        print("DISCORD_WEBHOOK missing")
+# =========================
+# DISCORD ALERT
+# =========================
+
+def send_alert(product):
+
+    if not WEBHOOK:
+        print("Missing DISCORD_WEBHOOK secret")
         return
 
-    lines = [
-        "🚨 POKEMON ALERT",
-        f"Name: {product['name']}",
-        f"Status: {status}",
-        f"Product: {product['url']}",
-        f"Cart: {WALMART_CART_URL}",
-        f"Checkout: {WALMART_CHECKOUT_URL}",
-        f"Time: {now_str()}",
-    ]
-
-    if extra_lines:
-        lines.extend(extra_lines)
-
-    data = {"content": "\n".join(lines)}
+    payload = {
+        "content": f"🚨 **{product['title']}**\n{product['url']}\nStore: {product['retailer']}"
+    }
 
     try:
-        r = requests.post(DISCORD_WEBHOOK, json=data, timeout=10)
-        print(f"Discord status code: {r.status_code}")
-        r.raise_for_status()
-    except Exception as e:
-        print(f"Discord send failed: {e}")
+        session.post(WEBHOOK, json=payload, timeout=10)
+    except:
+        pass
 
+# =========================
+# FETCH PAGE
+# =========================
 
-def fetch_text(url):
-    r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.text.lower()
-
-
-def fetch_raw(url):
-    r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.text
-
-
-def classify_product_page(text):
-    if "sold and shipped by walmart" in text and "add to cart" in text:
-        return "in_stock_walmart"
-
-    if "sold out" in text or "out of stock" in text:
-        return "out_of_stock"
-
-    if "more seller options" in text or "pro seller" in text or "seller reviews" in text:
-        if "sold and shipped by walmart" not in text:
-            return "third_party"
-
-    if "add to cart" in text:
-        return "possible_stock"
-
-    return "unknown"
-
-
-def classify_search_page(text):
-    if "sold and shipped by walmart" in text and "add to cart" in text:
-        return "in_stock_walmart"
-
-    if "add to cart" in text:
-        return "possible_stock"
-
-    return "unknown"
-
-
-def should_alert(url, status, cooldown=ALERT_COOLDOWN_SECONDS):
-    if status not in {
-        "in_stock_walmart",
-        "possible_stock",
-        "new_discovery",
-        "discovered_stock",
-    }:
-        return False
-
-    current = time.time()
-    last = LAST_ALERT_TIME.get((url, status), 0)
-
-    if current - last >= cooldown:
-        LAST_ALERT_TIME[(url, status)] = current
-        return True
-
-    return False
-
-
-def extract_item_id(url):
-    m = re.search(r"/ip/(\d+)", url)
-    return m.group(1) if m else None
-
-
-def check_walmart_product_fast(product):
-    item_id = extract_item_id(product["url"])
-    if not item_id:
-        return check_walmart_product_html(product)
+def fetch(url):
 
     try:
-        # still using the product page endpoint, but keeping structure split for future upgrades
-        r = requests.get(product["url"], headers=HEADERS, timeout=TIMEOUT)
-        r.raise_for_status()
-        text = r.text.lower()
-        return classify_product_page(text)
-    except Exception as e:
-        print(f"Fast check fallback for {product['name']}: {e}")
-        return check_walmart_product_html(product)
+        r = session.get(url, timeout=20)
+        return r.text
+    except:
+        return ""
 
+# =========================
+# SCAN STORE
+# =========================
 
-def check_walmart_product_html(product):
-    try:
-        text = fetch_text(product["url"])
-        return classify_product_page(text)
-    except Exception as e:
-        print(f"Error checking {product['name']}: {e}")
-        return "error"
+def scan_retailer(retailer, url):
 
+    html = fetch(url)
 
-def extract_product_links_from_search(html):
-    """
-    Pull likely Walmart /ip/ product links out of search result HTML.
-    Keeps it simple and resilient.
-    """
-    links = set()
+    if not html:
+        return []
 
-    # href="/ip/..."
-    for match in re.findall(r'href="([^"]+/ip/[^"]+)"', html, flags=re.IGNORECASE):
-        full = urljoin(WALMART_BASE, match.split("?")[0])
-        links.add(full)
+    soup = BeautifulSoup(html, "html.parser")
 
-    # escaped urls sometimes appear in page source
-    for match in re.findall(r'https:\\/\\/www\.walmart\.com\\/ip\\/[^"\\]+', html, flags=re.IGNORECASE):
-        cleaned = match.replace("\\/", "/").split("?")[0]
-        links.add(cleaned)
+    products = []
 
-    return list(links)
+    for link in soup.select("a[href]"):
 
+        title = link.get_text(strip=True)
 
-def looks_like_target_product(url, search_name):
-    """
-    Light filter so discovery alerts stay relevant to Pokemon products.
-    """
-    lowered = url.lower()
-    terms = search_name.lower()
+        if not title:
+            continue
 
-    if "/ip/" not in lowered:
-        return False
+        title_lower = title.lower()
 
-    # basic set relevance from search naming
-    tokens = []
-    for word in [
-        "perfect", "order", "phantasmal", "flames", "destined", "rivals",
-        "black", "bolt", "white", "flare", "pokemon", "elite", "trainer",
-        "bundle", "booster", "promo", "blister"
-    ]:
-        if word in terms:
-            tokens.append(word)
+        if not any(k in title_lower for k in KEYWORDS):
+            continue
 
-    if not tokens:
-        return True
+        if any(b in title_lower for b in EXCLUDE):
+            continue
 
-    hits = sum(1 for t in tokens if t in lowered)
-    return hits >= 1
+        href = link.get("href")
 
+        if not href:
+            continue
 
-def discover_from_search(search):
-    """
-    Returns a list of newly discovered product dicts.
-    """
-    discoveries = []
+        full_url = clean_url(urljoin(url, href))
 
-    try:
-        raw = fetch_raw(search["url"])
-        links = extract_product_links_from_search(raw)
+        products.append({
+            "title": title,
+            "url": full_url,
+            "retailer": retailer
+        })
 
-        for link in links:
-            if link in KNOWN_PRODUCT_URLS or link in DISCOVERED_URLS:
-                continue
+    return products
 
-            if not looks_like_target_product(link, search["name"]):
-                continue
+# =========================
+# BOT LOOP
+# =========================
 
-            item_id = extract_item_id(link)
-            if not item_id:
-                continue
+seen = set()
 
-            product = {
-                "name": f"Discovered from {search['name']}",
-                "url": link,
-                "site": "product",
-            }
+print("Pokemon TCG Drop Bot Running")
 
-            DISCOVERED_URLS.add(link)
-            discoveries.append(product)
+def run_bot():
 
-    except Exception as e:
-        print(f"Discovery error on {search['name']}: {e}")
+    global seen
 
-    return discoveries
+    while True:
 
+        for retailer, url in RETAILERS.items():
 
-def check_one(product):
-    try:
-        if product["site"] == "product":
-            return check_walmart_product_fast(product)
+            try:
 
-        text = fetch_text(product["url"])
-        return classify_search_page(text)
+                products = scan_retailer(retailer, url)
 
-    except Exception as e:
-        print(f"Error checking {product['name']}: {e}")
-        return "error"
+                for product in products:
 
+                    if product["url"] in seen:
+                        continue
 
-def handle_search(search):
-    """
-    1) classify the search page itself
-    2) discover new product pages from it
-    """
-    status = "error"
+                    seen.add(product["url"])
 
-    try:
-        text = fetch_text(search["url"])
-        status = classify_search_page(text)
-    except Exception as e:
-        print(f"Search check error for {search['name']}: {e}")
+                    send_alert(product)
 
-    discoveries = discover_from_search(search)
-    return status, discoveries
+                    print("ALERT:", product["title"])
 
+            except Exception as e:
 
-def main():
-    print("Pokemon Discovery Scanner Started")
-    print("Webhook loaded:", bool(DISCORD_WEBHOOK))
+                print("Error:", retailer, e)
 
-    dynamic_products = []
+        time.sleep(SCAN_INTERVAL)
 
-    end_time = time.time() + 540
+# =========================
+# START THREAD
+# =========================
 
-    while time.time() < end_time:
-        # 1) Check direct known products
-        for product in PRODUCTS:
-            status = check_one(product)
-            previous = LAST_STATUS.get(product["url"])
+thread = threading.Thread(target=run_bot)
+thread.daemon = True
+thread.start()
 
-            print(product["name"], status)
-
-            became_hot = (
-                status in {"in_stock_walmart", "possible_stock"}
-                and previous not in {"in_stock_walmart", "possible_stock"}
-            )
-
-            if became_hot and should_alert(product["url"], status):
-                extra = []
-
-                if status == "in_stock_walmart":
-                    extra.append("Signal: sold and shipped by Walmart + add to cart")
-                    extra.append("Best retail signal.")
-                elif status == "possible_stock":
-                    extra.append("Signal: add to cart text detected")
-                    extra.append("Check quickly in app/browser.")
-
-                send_discord(product, status, extra)
-
-            LAST_STATUS[product["url"]] = status
-
-        # 2) Check search pages + discover new product pages
-        for search in SEARCHES:
-            search_status, discoveries = handle_search(search)
-            prev_search_status = LAST_STATUS.get(search["url"])
-
-            print(search["name"], search_status)
-
-            became_hot = (
-                search_status in {"in_stock_walmart", "possible_stock"}
-                and prev_search_status not in {"in_stock_walmart", "possible_stock"}
-            )
-
-            if became_hot and should_alert(search["url"], search_status):
-                extra = ["Search page signal detected."]
-                send_discord(
-                    {"name": search["name"], "url": search["url"]},
-                    search_status,
-                    extra
-                )
-
-            LAST_STATUS[search["url"]] = search_status
-
-            for discovered in discoveries:
-                if should_alert(
-                    discovered["url"],
-                    "new_discovery",
-                    cooldown=DISCOVERY_ALERT_COOLDOWN_SECONDS
-                ):
-                    send_discord(
-                        discovered,
-                        "new_discovery",
-                        [
-                            f"Found from: {search['name']}",
-                            "New Walmart product page discovered.",
-                            "Open it and decide if it is worth adding as a permanent direct watch.",
-                        ]
-                    )
-                    dynamic_products.append(discovered)
-
-        # 3) Check discovered product pages too
-        for product in dynamic_products:
-            status = check_one(product)
-            previous = LAST_STATUS.get(product["url"])
-
-            print(product["name"], status)
-
-            became_hot = (
-                status in {"in_stock_walmart", "possible_stock"}
-                and previous not in {"in_stock_walmart", "possible_stock"}
-            )
-
-            if became_hot and should_alert(product["url"], "discovered_stock"):
-                extra = [
-                    "Discovered product page now looks hot.",
-                    f"Detected status: {status}",
-                ]
-                send_discord(product, "discovered_stock", extra)
-
-            LAST_STATUS[product["url"]] = status
-
-        print("---- next scan ----")
-        time.sleep(CHECK_INTERVAL)
-
-
-if __name__ == "__main__":
-    main()
+while True:
+    time.sleep(60)
+```
