@@ -19,21 +19,10 @@ RETAILERS = {
 "costco": "https://www.costco.com/CatalogSearch?keyword=pokemon"
 }
 
-KEYWORDS = [
-"elite trainer box",
-"etb",
-"booster bundle",
-"tech sticker",
-"collection box"
-]
+KEYWORDS = ["elite trainer box","etb","booster bundle","tech sticker","collection box"]
+EXCLUDE = ["journey together"]
 
-EXCLUDE = [
-"journey together"
-]
-
-HEADERS = {
-"User-Agent": "Mozilla/5.0"
-}
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 session = requests.Session()
 session.headers.update(HEADERS)
@@ -43,15 +32,12 @@ parts = urlsplit(url)
 return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
 
 def send_alert(product):
+if not WEBHOOK:
+print("Missing DISCORD_WEBHOOK secret")
+return
 
 ```
-if not WEBHOOK:
-    print("Missing DISCORD_WEBHOOK secret")
-    return
-
-payload = {
-    "content": f"🚨 **{product['title']}**\n{product['url']}\nStore: {product['retailer']}"
-}
+payload = {"content": f"🚨 {product['title']}\n{product['url']}\nStore: {product['retailer']}"}
 
 try:
     session.post(WEBHOOK, json=payload, timeout=10)
@@ -60,20 +46,16 @@ except:
 ```
 
 def fetch(url):
-
-```
 try:
-    r = session.get(url, timeout=20)
-    return r.text
+r = session.get(url, timeout=20)
+return r.text
 except:
-    return ""
-```
+return ""
 
 def scan_retailer(retailer, url):
 
 ```
 html = fetch(url)
-
 if not html:
     return []
 
@@ -84,7 +66,6 @@ products = []
 for link in soup.select("a[href]"):
 
     title = link.get_text(strip=True)
-
     if not title:
         continue
 
@@ -97,7 +78,6 @@ for link in soup.select("a[href]"):
         continue
 
     href = link.get("href")
-
     if not href:
         continue
 
@@ -114,19 +94,17 @@ return products
 
 seen = set()
 
-print("Pokemon TCG Drop Bot Running")
+print("Pokemon bot running")
 
 def run_bot():
-
-```
 global seen
 
+```
 while True:
 
     for retailer, url in RETAILERS.items():
 
         try:
-
             products = scan_retailer(retailer, url)
 
             for product in products:
@@ -141,7 +119,6 @@ while True:
                 print("ALERT:", product["title"])
 
         except Exception as e:
-
             print("Error:", retailer, e)
 
     time.sleep(SCAN_INTERVAL)
