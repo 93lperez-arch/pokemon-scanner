@@ -1,29 +1,29 @@
 import os
+import time
+from urllib.parse import urljoin
+
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
-import time
 
 WEBHOOK = os.getenv("DISCORD_WEBHOOK")
-
 SCAN_INTERVAL = 5
 
 RETAILERS = {
-"pokemon_center": "https://www.pokemoncenter.com/category/trading-card-game",
-"target": "https://www.target.com/s?searchTerm=pokemon+trading+card+game",
-"walmart": "https://www.walmart.com/search?q=pokemon+trading+card+game",
-"bestbuy": "https://www.bestbuy.com/site/searchpage.jsp?st=pokemon+trading+card+game",
-"gamestop": "https://www.gamestop.com/search/?q=pokemon+tcg",
-"samsclub": "https://www.samsclub.com/s/pokemon",
-"costco": "https://www.costco.com/CatalogSearch?keyword=pokemon"
+    "pokemon_center": "https://www.pokemoncenter.com/category/trading-card-game",
+    "target": "https://www.target.com/s?searchTerm=pokemon+trading+card+game",
+    "walmart": "https://www.walmart.com/search?q=pokemon+trading+card+game",
+    "bestbuy": "https://www.bestbuy.com/site/searchpage.jsp?st=pokemon+trading+card+game",
+    "gamestop": "https://www.gamestop.com/search/?q=pokemon+tcg",
+    "samsclub": "https://www.samsclub.com/s/pokemon",
+    "costco": "https://www.costco.com/CatalogSearch?keyword=pokemon",
 }
 
 KEYWORDS = [
-"elite trainer box",
-"etb",
-"booster bundle",
-"tech sticker",
-"collection box"
+    "elite trainer box",
+    "etb",
+    "booster bundle",
+    "tech sticker",
+    "collection box",
 ]
 
 EXCLUDE = ["journey together"]
@@ -32,82 +32,52 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 session = requests.Session()
 
-def fetch(url):
-try:
-r = session.get(url, headers=HEADERS, timeout=20)
-return r.text
-except:
-return ""
-
-def scan_store(store, url):
-
-html = fetch(url)
-
-if not html:
-    return []
-
-soup = BeautifulSoup(html, "html.parser")
-
-products = []
-
-for link in soup.select("a[href]"):
-
-    title = link.get_text(strip=True)
-
-    if not title:
-        continue
-
-    title_lower = title.lower()
-
-    if not any(k in title_lower for k in KEYWORDS):
-        continue
-
-    if any(b in title_lower for b in EXCLUDE):
-        continue
-
-    href = link.get("href")
-
-    if not href:
-        continue
-
-    full_url = urljoin(url, href)
-
-    products.append((title, full_url))
-
-return products
+print("Pokemon bot running")
 
 seen = set()
 
-print("Pokemon bot running")
-
 while True:
+    for store, url in RETAILERS.items():
+        try:
+            response = session.get(url, headers=HEADERS, timeout=20)
+            soup = BeautifulSoup(response.text, "html.parser")
 
-for store, url in RETAILERS.items():
+            for link in soup.select("a[href]"):
+                title = link.get_text(strip=True)
+                if not title:
+                    continue
 
-    try:
+                title_lower = title.lower()
 
-        products = scan_store(store, url)
+                if not any(keyword in title_lower for keyword in KEYWORDS):
+                    continue
 
-        for title, link in products:
+                if any(bad in title_lower for bad in EXCLUDE):
+                    continue
 
-            if link in seen:
-                continue
+                href = link.get("href")
+                if not href:
+                    continue
 
-            seen.add(link)
+                full_url = urljoin(url, href)
 
-            if WEBHOOK:
-                payload = {
-                    "content": f"🚨 {title}\n{link}\nStore: {store}"
-                }
-                try:
-                    session.post(WEBHOOK, json=payload, timeout=10)
-                except:
-                    pass
+                if full_url in seen:
+                    continue
 
-            print("ALERT:", title)
+                seen.add(full_url)
 
-    except Exception as e:
+                if WEBHOOK:
+                    payload = {
+                        "content": f"🚨 {title}\n{full_url}\nStore: {store}"
+                    }
+                    try:
+                        session.post(WEBHOOK, json=payload, timeout=10)
+                    except Exception:
+                        pass
 
-        print("Error:", store, e)
+                print("ALERT:", title)
 
-time.sleep(SCAN_INTERVAL)
+        except Exception as e:
+            print("Error:", store, e)
+
+    time.sleep(SCAN_INTERVAL)
